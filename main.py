@@ -6,6 +6,10 @@ main.py
 import os
 import json
 import sys
+from dotenv import load_dotenv
+
+# 載入 .env 檔
+load_dotenv()
 
 # 把 src 加入路徑
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
