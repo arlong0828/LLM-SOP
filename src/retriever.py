@@ -3,21 +3,48 @@ retriever.py
 線上階段：接收使用者查詢，透過圖譜找到最相關的 SOP
 """
 
+import re
 import json
+import time
 import anthropic
 
 client = anthropic.Anthropic()
 MODEL = "claude-sonnet-4-20250514"
 
 
-def _call_claude(system_prompt: str, user_content: str) -> str:
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=500,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}]
-    )
-    return response.content[0].text
+def _parse_json(raw: str) -> dict:
+    """解析 Claude 輸出的 JSON，自動去除 markdown code block 包裹"""
+    text = raw.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if match:
+        text = match.group(1).strip()
+    return json.loads(text)
+
+
+def _call_claude(system_prompt: str, user_content: str, retries: int = 3) -> str:
+    for attempt in range(retries):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}]
+            )
+            return response.content[0].text
+        except anthropic.APIStatusError as e:
+            if attempt < retries - 1 and e.status_code in (429, 500, 502, 503, 529):
+                wait = 2 ** attempt
+                print(f"  [警告] API 錯誤 {e.status_code}，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIConnectionError:
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                print(f"  [警告] 連線失敗，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
 
 
 # ──────────────────────────────────────────
@@ -36,7 +63,7 @@ def llm_router(query: str) -> dict:
 {"wE": 0.x, "wC": 0.x, "wF": 0.x}"""
 
     raw = _call_claude(system, f"查詢：{query}")
-    weights = json.loads(raw.strip())
+    weights = _parse_json(raw)
     print(f"  路由器權重 → 實體:{weights['wE']} 因果:{weights['wC']} 流程:{weights['wF']}")
     return weights
 

@@ -3,22 +3,50 @@ graph_builder.py
 離線階段：讀取 SOP 文字，呼叫 Claude 建立三種圖譜
 """
 
+import re
 import json
+import time
 import anthropic
 
 client = anthropic.Anthropic()
 MODEL = "claude-sonnet-4-20250514"
 
 
-def _call_claude(system_prompt: str, user_content: str) -> str:
-    """共用的 Claude 呼叫函數"""
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}]
-    )
-    return response.content[0].text
+def _parse_json(raw: str) -> dict:
+    """解析 Claude 輸出的 JSON，自動去除 markdown code block 包裹"""
+    text = raw.strip()
+    # 去除 ```json ... ``` 或 ``` ... ```
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if match:
+        text = match.group(1).strip()
+    return json.loads(text)
+
+
+def _call_claude(system_prompt: str, user_content: str, retries: int = 3) -> str:
+    """共用的 Claude 呼叫函數，含重試機制"""
+    for attempt in range(retries):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=2000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}]
+            )
+            return response.content[0].text
+        except anthropic.APIStatusError as e:
+            if attempt < retries - 1 and e.status_code in (429, 500, 502, 503, 529):
+                wait = 2 ** attempt
+                print(f"  [警告] API 錯誤 {e.status_code}，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIConnectionError:
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                print(f"  [警告] 連線失敗，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
 
 
 # ──────────────────────────────────────────
@@ -36,7 +64,7 @@ def build_procedure_card(sop_text: str) -> dict:
 {"title": "...", "abstract": "..."}"""
 
     raw = _call_claude(system, sop_text)
-    return json.loads(raw.strip())
+    return _parse_json(raw)
 
 
 # ──────────────────────────────────────────
@@ -61,7 +89,7 @@ def build_entity_graph(sop_text: str) -> dict:
 }"""
 
     raw = _call_claude(system, sop_text)
-    return json.loads(raw.strip())
+    return _parse_json(raw)
 
 
 # ──────────────────────────────────────────
@@ -85,7 +113,7 @@ def build_causal_graph(sop_text: str) -> dict:
 }"""
 
     raw = _call_claude(system, sop_text)
-    return json.loads(raw.strip())
+    return _parse_json(raw)
 
 
 # ──────────────────────────────────────────
@@ -115,7 +143,7 @@ def build_flow_graph(sop_text: str) -> dict:
 }"""
 
     raw = _call_claude(system, sop_text)
-    return json.loads(raw.strip())
+    return _parse_json(raw)
 
 
 # ──────────────────────────────────────────

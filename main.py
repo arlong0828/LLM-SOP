@@ -14,9 +14,9 @@ load_dotenv()
 # 把 src 加入路徑
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from graph_builder import build_all_graphs
-from retriever import retrieve
-from generator import generate_response
+from src.graph_builder import build_all_graphs
+from src.retriever import retrieve
+from src.generator import generate_response
 
 # ──────────────────────────────────────────
 # 設定
@@ -86,7 +86,7 @@ def online_query(query: str, all_graphs: list):
         pc_title = r["graph_data"].get("procedure_card", {}).get("title", r["sop_id"])
         print(f"  #{i+1} [{r['sop_id']}] {pc_title}")
         print(f"      總分:{r['final_score']} | PC:{r['pc_score']} "
-              f"實體:{r['entity_score']} 因果:{r['causal_score']} 流程:{r['flow_score']}")
+                f"實體:{r['entity_score']} 因果:{r['causal_score']} 流程:{r['flow_score']}")
 
     # Step 4：取最佳 SOP 生成回答
     best = results[0]
@@ -117,8 +117,8 @@ def main():
 
     # 測試查詢
     test_queries = [
-        "伺服器溫度過高，ALARM-TEMP-001 被觸發，我該怎麼辦？",
-        "為什麼伺服器會過熱？",
+        # "伺服器溫度過高，ALARM-TEMP-001 被觸發，我該怎麼辦？",
+        # "為什麼伺服器會過熱？",
         "伺服器連不上，該如何排查？",
     ]
 

@@ -3,6 +3,7 @@ generator.py
 線上階段：拿到最佳 SOP 的流程圖，生成可執行的回答
 """
 
+import time
 import anthropic
 
 client = anthropic.Anthropic()
@@ -63,11 +64,26 @@ SOP 執行步驟：
 
 請根據以上步驟回答操作員的問題。"""
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=1000,
-        system=system,
-        messages=[{"role": "user", "content": user_content}]
-    )
-
-    return response.content[0].text
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=1000,
+                system=system,
+                messages=[{"role": "user", "content": user_content}]
+            )
+            return response.content[0].text
+        except anthropic.APIStatusError as e:
+            if attempt < 2 and e.status_code in (429, 500, 502, 503, 529):
+                wait = 2 ** attempt
+                print(f"  [警告] API 錯誤 {e.status_code}，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIConnectionError:
+            if attempt < 2:
+                wait = 2 ** attempt
+                print(f"  [警告] 連線失敗，{wait}s 後重試...")
+                time.sleep(wait)
+            else:
+                raise
